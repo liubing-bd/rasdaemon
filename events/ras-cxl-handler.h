@@ -76,7 +76,7 @@ struct ras_cxl_event_common_hdr {
 	const char *host;
 	uint64_t serial;
 	const char *log_type;
-	const char *hdr_uuid;
+	char hdr_uuid[RAS_UUID_STR_SIZE];
 	uint32_t hdr_flags;
 	uint16_t hdr_handle;
 	uint16_t hdr_related_handle;
@@ -186,7 +186,7 @@ struct ras_cxl_memory_sparing_event {
 const char *ras_cxl_test_log_type(uint32_t log_type);
 void ras_cxl_test_convert_timestamp(unsigned long long timestamp,
 				    char *buf, uint16_t size);
-const char *ras_cxl_test_uuid(const char *uuid);
+const char *ras_cxl_test_uuid(const char *uuid, char out[RAS_UUID_STR_SIZE]);
 #endif
 
 #endif

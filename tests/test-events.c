@@ -112,6 +112,7 @@ static void test_non_standard_decoder_registry(void **state)
 
 static void test_uuid_formatting(void **state)
 {
+	char out[RAS_UUID_STR_SIZE];
 	const unsigned char uuid_le[16] = {
 		0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66,
 		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
@@ -121,9 +122,9 @@ static void test_uuid_formatting(void **state)
 		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
 	};
 
-	assert_string_equal(ras_uuid_str((const char *)uuid_le, RAS_UUID_LE),
+	assert_string_equal(ras_uuid_str((const char *)uuid_le, RAS_UUID_LE, out),
 			    "00112233-4455-6677-8899-aabbccddeeff");
-	assert_string_equal(ras_uuid_str((const char *)uuid_be, RAS_UUID_BE),
+	assert_string_equal(ras_uuid_str((const char *)uuid_be, RAS_UUID_BE, out),
 			    "00112233-4455-6677-8899-aabbccddeeff");
 }
 
@@ -508,6 +509,7 @@ int test_cpu_isolation(void)
 #ifdef HAVE_CXL
 static void test_cxl_common_decoders(void **state)
 {
+	char out[RAS_UUID_STR_SIZE];
 	const unsigned char uuid[16] = {
 		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
@@ -517,7 +519,7 @@ static void test_cxl_common_decoders(void **state)
 	assert_string_equal(ras_cxl_test_log_type(0), "Informational");
 	assert_string_equal(ras_cxl_test_log_type(3), "Fatal");
 	assert_string_equal(ras_cxl_test_log_type(99), "Unknown");
-	assert_string_equal(ras_cxl_test_uuid((const char *)uuid),
+	assert_string_equal(ras_cxl_test_uuid((const char *)uuid, out),
 			    "00112233-4455-6677-8899-aabbccddeeff");
 	ras_cxl_test_convert_timestamp(0, timestamp, sizeof(timestamp));
 	assert_string_equal(timestamp, "1970-01-01 00:00:00 +0000");
@@ -553,6 +555,96 @@ static void test_cxl_poison_record(void **state)
 	trace_seq_destroy(&seq);
 }
 
+static char published_header_uuid[64];
+static char published_region_uuid[64];
+static unsigned int media_publications;
+
+static int capture_media_uuids(struct ras_events *ras, int event, void *data)
+{
+	const char *header, *region;
+
+	if (event == CXL_GENERAL_MEDIA_EVENT) {
+		const struct ras_cxl_general_media_event *ev = data;
+
+		header = ev->hdr.hdr_uuid;
+		region = ev->region_uuid;
+	} else {
+		const struct ras_cxl_dram_event *ev = data;
+
+		header = ev->hdr.hdr_uuid;
+		region = ev->region_uuid;
+	}
+	snprintf(published_header_uuid, sizeof(published_header_uuid), "%s", header);
+	snprintf(published_region_uuid, sizeof(published_region_uuid), "%s",
+		 region ? region : "(null)");
+	media_publications++;
+	return 0;
+}
+
+static void check_cxl_media_uuids(const char *name, bool has_region)
+{
+	static const unsigned char header_uuid[16] = {
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+	};
+	static const unsigned char region_uuid[16] = {
+		0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88,
+		0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00,
+	};
+	static const char * const fields[] = {
+		"serial", "log", "hdr_flags", "hdr_handle", "hdr_related_handle",
+		"hdr_timestamp", "hdr_length", "hdr_maint_op_class", "dpa",
+		"dpa_flags", "descriptor", "type", "sub_type", "transaction_type",
+		"hpa", "hpa_alias0", "validity_flags",
+	};
+	static const struct ras_event_consumer consumer = {
+		.name = "test-media-uuids",
+		.priority = PRI_NORMAL,
+		.events = BIT_ULL(CXL_GENERAL_MEDIA_EVENT) | BIT_ULL(CXL_DRAM_EVENT),
+		.consume = capture_media_uuids,
+	};
+	struct tep_event event = { 0 };
+	struct tep_record record;
+	struct trace_seq seq;
+	struct ras_events ras;
+	int ret;
+
+	init_trace(&seq, &record, &ras);
+	trace_mock_add_raw("memdev", "mem0", sizeof("mem0"));
+	trace_mock_add_raw("host", "host0", sizeof("host0"));
+	trace_mock_add_raw("hdr_uuid", header_uuid, sizeof(header_uuid));
+	if (has_region) {
+		trace_mock_add_raw("region_name", "region0", sizeof("region0"));
+		trace_mock_add_raw("region_uuid", region_uuid, sizeof(region_uuid));
+	}
+	for (size_t i = 0; i < ARRAY_SIZE(fields); i++)
+		trace_mock_add_value(fields[i], 0);
+
+	media_publications = 0;
+	assert_int_equal(ras_event_consumer_register(&consumer), 0);
+	ret = RUN_EVENT("cxl", name, &seq, &record, &event, &ras);
+	assert_int_equal(ras_event_consumer_unregister(&consumer), 0);
+	finish_trace(&seq);
+	trace_seq_destroy(&seq);
+
+	assert_int_equal(ret, 0);
+	assert_int_equal(media_publications, 1);
+	assert_string_equal(published_header_uuid, "00112233-4455-6677-8899-aabbccddeeff");
+	assert_string_equal(published_region_uuid,
+			    has_region ? "ffeeddcc-bbaa-9988-7766-554433221100" : "(null)");
+}
+
+static void test_cxl_general_media_uuids(void **state)
+{
+	check_cxl_media_uuids("cxl_general_media", true);
+}
+
+static void test_cxl_dram_uuids(void **state)
+{
+	check_cxl_media_uuids("cxl_dram", true);
+	check_cxl_media_uuids("cxl_dram", false);
+}
+
 static void test_all_cxl_handlers_reject_empty_record(void **state)
 {
 	static const char * const events[] = {
@@ -584,6 +676,8 @@ static void test_all_cxl_handlers_reject_empty_record(void **state)
 static const struct CMUnitTest cxl_tests[] = {
 	cmocka_unit_test(test_cxl_common_decoders),
 	cmocka_unit_test(test_cxl_poison_record),
+	cmocka_unit_test(test_cxl_general_media_uuids),
+	cmocka_unit_test(test_cxl_dram_uuids),
 	cmocka_unit_test(test_all_cxl_handlers_reject_empty_record),
 };
 
@@ -690,6 +784,7 @@ int test_diskerror(void)
 #ifdef HAVE_EXTLOG
 static void test_extlog_mappings(void **state)
 {
+	char out[RAS_UUID_STR_SIZE];
 	const unsigned char uuid[16] = {
 		0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66,
 		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
@@ -704,7 +799,7 @@ static void test_extlog_mappings(void **state)
 	assert_int_equal(ras_extlog_test_mask(0xff), ~0ULL);
 	assert_int_equal(ras_extlog_test_mask((int8_t)0xff), ~0ULL);
 	assert_int_equal(ras_extlog_test_mask(64), ~0ULL);
-	assert_string_equal(ras_uuid_str((const char *)uuid, RAS_UUID_LE),
+	assert_string_equal(ras_uuid_str((const char *)uuid, RAS_UUID_LE, out),
 			    "00112233-4455-6677-8899-aabbccddeeff");
 }
 

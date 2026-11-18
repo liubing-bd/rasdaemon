@@ -211,13 +211,16 @@ enum ras_uuid_byte_order {
 	RAS_UUID_BE,
 };
 
+#define RAS_UUID_STR_SIZE	sizeof("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
 /**
  * ras_uuid_str - format a binary UUID
  * @uuid: 16-byte UUID
  * @order: byte order of the UUID fields
+ * @out: caller-owned buffer of RAS_UUID_STR_SIZE bytes
  *
- * Return: a pointer to a static 36-character UUID string. The returned
- * buffer is overwritten by the next call.
+ * Return: the formatted UUID in @out.
  */
-const char *ras_uuid_str(const char *uuid, enum ras_uuid_byte_order order);
+const char *ras_uuid_str(const char *uuid, enum ras_uuid_byte_order order,
+			 char out[RAS_UUID_STR_SIZE]);
 #endif

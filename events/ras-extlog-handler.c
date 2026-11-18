@@ -232,6 +232,7 @@ static void report_extlog_mem_event(struct ras_events *ras,
 				    struct trace_seq *s,
 				    struct ras_extlog_event *ev)
 {
+	char uuid[RAS_UUID_STR_SIZE];
 	const char *level;
 
 	switch (ev->severity) {
@@ -258,7 +259,7 @@ static void report_extlog_mem_event(struct ras_events *ras,
 		err_mask(ev->pa_mask_lsb),
 		err_cper_data(ev->cper_data),
 		ev->fru_text,
-		ras_uuid_str(ev->fru_id, RAS_UUID_LE));
+		ras_uuid_str(ev->fru_id, RAS_UUID_LE, uuid));
 }
 
 static int ras_extlog_mem_event_handler(struct trace_seq *s,

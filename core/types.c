@@ -22,9 +22,9 @@ const char *loglevel_str[] = {
 	[LOGLEVEL_DEBUG]	= "[DEBUG]",
 };
 
-const char *ras_uuid_str(const char *uu, enum ras_uuid_byte_order order)
+const char *ras_uuid_str(const char *uu, enum ras_uuid_byte_order order,
+			 char out[RAS_UUID_STR_SIZE])
 {
-	static char uuid[sizeof("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")];
 	static const unsigned char le[16] = {
 		3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15
 	};
@@ -32,11 +32,11 @@ const char *ras_uuid_str(const char *uu, enum ras_uuid_byte_order order)
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 	};
 	const unsigned char *map = order == RAS_UUID_LE ? le : be;
-	char *p = uuid;
+	char *p = out;
 	int i;
 
 	for (i = 0; i < 16; i++) {
-		p += snprintf(p, sizeof(uuid) - (p - uuid), "%.2x",
+		p += snprintf(p, RAS_UUID_STR_SIZE - (p - out), "%.2x",
 			      (unsigned char)uu[map[i]]);
 		switch (i) {
 		case 3:
@@ -49,5 +49,5 @@ const char *ras_uuid_str(const char *uu, enum ras_uuid_byte_order order)
 	}
 	*p = '\0';
 
-	return uuid;
+	return out;
 }

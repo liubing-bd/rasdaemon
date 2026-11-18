@@ -86,12 +86,13 @@ void unregister_ns_ev_decoder(struct ras_ns_ev_decoder *ns_ev_decoder)
 static int find_ns_ev_decoder(const char *sec_type, struct ras_ns_ev_decoder **p_ns_ev_dec)
 {
 	struct ras_ns_ev_decoder *ns_ev_decoder;
+	char uuid[RAS_UUID_STR_SIZE];
 	int match = 0;
 
+	ras_uuid_str(sec_type, RAS_UUID_LE, uuid);
 	ns_ev_decoder = ras_ns_ev_dec_list;
 	while (ns_ev_decoder) {
-		if (strcmp(ras_uuid_str(sec_type, RAS_UUID_LE),
-			   ns_ev_decoder->sec_type) == 0) {
+		if (strcmp(uuid, ns_ev_decoder->sec_type) == 0) {
 			*p_ns_ev_dec = ns_ev_decoder;
 			match  = 1;
 			break;
@@ -150,6 +151,7 @@ static int ras_non_standard_event_handler(struct trace_seq *s,
 	time_t now;
 	struct tm *tm;
 	struct ras_non_standard_event ev;
+	char uuid[RAS_UUID_STR_SIZE];
 	struct ras_ns_ev_decoder *ns_ev_decoder;
 
 	/*
@@ -194,19 +196,18 @@ static int ras_non_standard_event_handler(struct trace_seq *s,
 					record, &len, 1);
 	if (!ev.sec_type)
 		return -1;
-	if (strcmp(ras_uuid_str(ev.sec_type, RAS_UUID_LE),
-		   "e8ed898d-df16-43cc-8ecc-54f060ef157f") == 0)
+	ras_uuid_str(ev.sec_type, RAS_UUID_LE, uuid);
+	if (strcmp(uuid, "e8ed898d-df16-43cc-8ecc-54f060ef157f") == 0)
 		trace_seq_printf(s, " section type: %s",
 				 "Ampere Specific Error");
 	else
-		trace_seq_printf(s, " section type: %s",
-				 ras_uuid_str(ev.sec_type, RAS_UUID_LE));
+		trace_seq_printf(s, " section type: %s", uuid);
 	ev.fru_text = tep_get_field_raw(s, event, "fru_text",
 					record, &len, 1);
 	ev.fru_id = tep_get_field_raw(s, event, "fru_id",
 				      record, &len, 1);
 	trace_seq_printf(s, " fru text: %s fru id: %s ",
-			 ev.fru_text, ras_uuid_str(ev.fru_id, RAS_UUID_LE));
+			 ev.fru_text, ras_uuid_str(ev.fru_id, RAS_UUID_LE, uuid));
 
 	if (tep_get_field_val(s, event, "len", record, &val, 1) < 0)
 		return -1;

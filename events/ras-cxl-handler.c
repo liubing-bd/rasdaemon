@@ -478,9 +478,9 @@ void ras_cxl_test_convert_timestamp(unsigned long long timestamp,
 	convert_timestamp(timestamp, buf, size);
 }
 
-const char *ras_cxl_test_uuid(const char *uuid)
+const char *ras_cxl_test_uuid(const char *uuid, char out[RAS_UUID_STR_SIZE])
 {
-	return ras_uuid_str(uuid, RAS_UUID_BE);
+	return ras_uuid_str(uuid, RAS_UUID_BE, out);
 }
 #endif
 
@@ -613,6 +613,7 @@ static int handle_ras_cxl_common_hdr(struct trace_seq *s,
 				     struct tep_event *event, void *context,
 				     struct ras_cxl_event_common_hdr *hdr)
 {
+	const char *uuid;
 	int len;
 	unsigned long long val;
 	struct ras_events *ras = context;
@@ -645,10 +646,10 @@ static int handle_ras_cxl_common_hdr(struct trace_seq *s,
 	if (trace_seq_printf(s, "log type:%s ", hdr->log_type) <= 0)
 		return -1;
 
-	hdr->hdr_uuid = tep_get_field_raw(s, event, "hdr_uuid", record, &len, 1);
-	if (!hdr->hdr_uuid)
+	uuid = tep_get_field_raw(s, event, "hdr_uuid", record, &len, 1);
+	if (!uuid || len != 16)
 		return -1;
-	hdr->hdr_uuid = ras_uuid_str(hdr->hdr_uuid, RAS_UUID_BE);
+	ras_uuid_str(uuid, RAS_UUID_BE, hdr->hdr_uuid);
 	if (trace_seq_printf(s, "hdr_uuid:%s ", hdr->hdr_uuid) <= 0)
 		return -1;
 
@@ -833,6 +834,7 @@ static int ras_cxl_general_media_event_handler(struct trace_seq *s,
 	unsigned long long val;
 	struct ras_events *ras = context;
 	struct ras_cxl_general_media_event ev;
+	char region_uuid[RAS_UUID_STR_SIZE];
 
 	memset(&ev, 0, sizeof(ev));
 	trace_seq_printf(s, "%s ", loglevel_str[LOGLEVEL_ERR]);
@@ -908,9 +910,9 @@ static int ras_cxl_general_media_event_handler(struct trace_seq *s,
 
 	ev.region_uuid = tep_get_field_raw(s, event, "region_uuid",
 					   record, &len, 1);
-	if (!ev.region_uuid)
+	if (!ev.region_uuid || len != 16)
 		return -1;
-	ev.region_uuid = ras_uuid_str(ev.region_uuid, RAS_UUID_BE);
+	ev.region_uuid = ras_uuid_str(ev.region_uuid, RAS_UUID_BE, region_uuid);
 	if (trace_seq_printf(s, "region_uuid:%s ", ev.region_uuid) <= 0)
 		return -1;
 
@@ -1024,6 +1026,7 @@ static int ras_cxl_dram_event_handler(struct trace_seq *s,
 	unsigned long long val;
 	struct ras_events *ras = context;
 	struct ras_cxl_dram_event ev;
+	char region_uuid[RAS_UUID_STR_SIZE];
 
 	memset(&ev, 0, sizeof(ev));
 	trace_seq_printf(s, "%s ", loglevel_str[LOGLEVEL_ERR]);
@@ -1099,7 +1102,9 @@ static int ras_cxl_dram_event_handler(struct trace_seq *s,
 
 	ev.region_uuid = tep_get_field_raw(s, event, "region_uuid", record, &len, 1);
 	if (ev.region_uuid) {
-		ev.region_uuid = ras_uuid_str(ev.region_uuid, RAS_UUID_BE);
+		if (len != 16)
+			return -1;
+		ev.region_uuid = ras_uuid_str(ev.region_uuid, RAS_UUID_BE, region_uuid);
 		trace_seq_printf(s, "region_uuid:%s ", ev.region_uuid);
 	}
 
