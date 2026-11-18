@@ -527,7 +527,7 @@ int ras_event_filter(struct ras_events *ras, const char *group,
  * @pevent: event parser receiving header metadata
  *
  * Return:
- * 4096, after parsing the page header when it is available.
+ * The trace sub-buffer size from header_page, or 4096 if unavailable.
  */
 static int get_pagesize(struct ras_events *ras, struct tep_handle *pevent)
 {
@@ -544,10 +544,21 @@ static int get_pagesize(struct ras_events *ras, struct tep_handle *pevent)
 	if (tep_parse_header_page(pevent, buf, len, sizeof(long)))
 		goto error;
 
+	len = tep_get_sub_buffer_size(pevent);
+	if (len > 0)
+		page_size = len;
+
 error:
 	close(fd);
 	return page_size;
 }
+
+#ifdef HAVE_UNITTEST
+int ras_events_test_get_pagesize(struct ras_events *ras, struct tep_handle *pevent)
+{
+	return get_pagesize(ras, pevent);
+}
+#endif
 
 /**
  * parse_ras_data - dispatch one raw ring-buffer record

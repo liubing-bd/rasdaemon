@@ -75,7 +75,7 @@ pydir = py.get_install_dir(pure: true)
 # Global dependencies and install directory paths
 #
 
-libtraceevent_dep = dependency('libtraceevent', required: true)
+libtraceevent_dep = dependency('libtraceevent', version: '>=1.5', required: true)
 
 systemd_dep = dependency('systemd', required: false)
 if systemd_dep.found()

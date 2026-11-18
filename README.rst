@@ -109,8 +109,8 @@ The results from its latest run are automatically updated in this panel:
 Building
 --------
 
-rasdaemon requires Meson 0.60 or newer, Ninja, a C compiler, libtraceevent,
-Python, and libpci. Database backends and unit tests have additional optional
+rasdaemon requires Meson 0.60 or newer, Ninja, a C compiler,
+libtraceevent 1.5 or newer, Python, and libpci. Database backends and unit tests have additional optional
 dependencies described in the `building and installation guide
 <https://mchehab.github.io/rasdaemon/installation.html>`_.
 

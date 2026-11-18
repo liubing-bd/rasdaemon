@@ -24,6 +24,7 @@
 #include "core/types.h"
 #include "events-arch-x86/ras-mce-handler.h"
 #include "tests/unittest.h"
+#include "tests/trace-mock.h"
 
 #if defined(HAVE_MEMORY_CE_PFA) || defined(HAVE_MEMORY_ROW_CE_PFA)
 struct test_tree_node {
@@ -65,6 +66,72 @@ static void test_string_helpers(void **state)
 	assert_string_equal(buf, "too-lon");
 	assert_int_equal(GENMASK(7, 4), 0xf0);
 	assert_int_equal(EXTRACT(0xabcd, 4, 7), 0xc);
+}
+
+static void test_trace_subbuffer_size(void **state)
+{
+	static const int sizes[] = { 4096, 65536, 131072 };
+	char dir[] = "/tmp/rasdaemon-header-XXXXXX";
+	char events[sizeof(dir) + sizeof("/events")];
+	char header[sizeof(events) + sizeof("/header_page")];
+	struct ras_events ras = { 0 };
+	struct tep_handle *tep;
+	FILE *fp;
+
+	assert_non_null(mkdtemp(dir));
+	snprintf(events, sizeof(events), "%s/events", dir);
+	snprintf(header, sizeof(header), "%s/header_page", events);
+	assert_int_equal(mkdir(events, 0700), 0);
+	strscpy(ras.tracing, dir, sizeof(ras.tracing));
+
+	for (size_t i = 0; i < ARRAY_SIZE(sizes); i++) {
+		int written;
+
+		fp = fopen(header, "w");
+		assert_non_null(fp);
+
+		written = fprintf(fp,
+				  "field: u64 timestamp; offset:0; size:8; signed:0;\n"
+				  "field: local_t commit; offset:8; size:8; signed:1;\n"
+				  "field: int overwrite; offset:8; size:1; signed:1;\n"
+				  "field: char data; offset:16; size:%d; signed:1;\n",
+				  sizes[i] - 16);
+		assert_true(written > 0);
+		assert_int_equal(fclose(fp), 0);
+		tep = tep_alloc();
+		assert_non_null(tep);
+		assert_int_equal(ras_events_test_get_pagesize(&ras, tep), sizes[i]);
+		tep_free(tep);
+	}
+
+	/* A nonempty header with no data field provides no usable size. */
+	fp = fopen(header, "w");
+	assert_non_null(fp);
+	assert_true(fputs("not a header\n", fp) >= 0);
+	assert_int_equal(fclose(fp), 0);
+	tep = tep_alloc();
+	assert_non_null(tep);
+	assert_int_equal(ras_events_test_get_pagesize(&ras, tep), 4096);
+	tep_free(tep);
+
+	/* Keep the fallback for an empty or missing header. */
+	fp = fopen(header, "w");
+	assert_non_null(fp);
+	assert_int_equal(fclose(fp), 0);
+	tep = tep_alloc();
+	assert_non_null(tep);
+	assert_int_equal(ras_events_test_get_pagesize(&ras, tep), 4096);
+	tep_free(tep);
+	assert_int_equal(unlink(header), 0);
+	/* Skip open_trace()'s wait for a node that intentionally does not exist. */
+	access_mock_start(header);
+	tep = tep_alloc();
+	assert_non_null(tep);
+	assert_int_equal(ras_events_test_get_pagesize(&ras, tep), 4096);
+	tep_free(tep);
+	access_mock_stop();
+	assert_int_equal(rmdir(events), 0);
+	assert_int_equal(rmdir(dir), 0);
 }
 
 static void test_bitfield_message(void **state)
@@ -392,6 +459,7 @@ static int consumer_test_setup(void **state)
 
 static const struct CMUnitTest tests[] = {
 	cmocka_unit_test(test_string_helpers),
+	cmocka_unit_test(test_trace_subbuffer_size),
 	cmocka_unit_test(test_bitfield_message),
 	cmocka_unit_test(test_bitfield_decoders),
 #ifdef HAVE_CPU_FAULT_ISOLATION

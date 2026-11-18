@@ -294,6 +294,7 @@ void ras_events_cleanup(struct ras_events *ras);
 int handle_ras_events(struct ras_events *ras);
 #ifdef HAVE_UNITTEST
 bool ras_events_test_is_disabled(const char *group, const char *event);
+int ras_events_test_get_pagesize(struct ras_events *ras, struct tep_handle *pevent);
 #endif
 
 #define REGISTER_RAS_EVENT(entry) \

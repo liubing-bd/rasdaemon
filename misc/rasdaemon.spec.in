@@ -16,7 +16,7 @@ BuildRequires:		meson >= 0.60
 BuildRequires:		ninja-build
 BuildRequires:		sqlite-devel
 BuildRequires:		systemd
-BuildRequires:		libtraceevent-devel
+BuildRequires:		libtraceevent-devel >= 1.5
 BuildRequires:		pciutils-devel
 BuildRequires:		python3-devel
 BuildRequires:		python3-sqlalchemy
@@ -28,7 +28,7 @@ Requires:		python3
 Requires:		python3-sqlalchemy
 Recommends:		python3-mysqlclient
 Recommends:		python3-psycopg2
-Requires:		libtraceevent
+Requires:		libtraceevent >= 1.5
 %ifarch %{ix86} x86_64 riscv64
 Requires:		pciutils
 %endif

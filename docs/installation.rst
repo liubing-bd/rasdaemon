@@ -3,8 +3,8 @@
 Building and Installing
 =======================
 
-rasdaemon requires Meson 0.60 or newer, Ninja, a C compiler, libtraceevent,
-and Python. Sphinx is optional and enables the HTML documentation target;
+rasdaemon requires Meson 0.60 or newer, Ninja, a C compiler,
+libtraceevent 1.5 or newer, and Python. Sphinx is optional and enables the HTML documentation target;
 cmocka is optional and enables unit tests.
 
 On Fedora, the relevant packages are::
