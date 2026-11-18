@@ -525,6 +525,10 @@ static void test_cxl_common_decoders(void **state)
 
 static void test_cxl_poison_record(void **state)
 {
+	static const unsigned char uuid[16] = {
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+	};
 	struct trace_seq seq;
 	struct tep_record record;
 	struct tep_event event = { 0 };
@@ -537,7 +541,7 @@ static void test_cxl_poison_record(void **state)
 	trace_mock_add_value("serial", 0x1234);
 	trace_mock_add_value("trace_type", 1);
 	trace_mock_add_raw("region", "region0", 8);
-	trace_mock_add_raw("uuid", "uuid0", 6);
+	trace_mock_add_raw("uuid", uuid, sizeof(uuid));
 	trace_mock_add_value("hpa", 0x1000);
 	trace_mock_add_value("hpa_alias0", 0x2000);
 	trace_mock_add_value("dpa", 0x3000);
@@ -549,6 +553,7 @@ static void test_cxl_poison_record(void **state)
 	output = finish_trace(&seq);
 	assert_non_null(strstr(output, "trace_type:Inject"));
 	assert_non_null(strstr(output, "source:Injected"));
+	assert_non_null(strstr(output, "region_uuid:00112233-4455-6677-8899-aabbccddeeff"));
 	assert_non_null(strstr(output, "dpa:0x3000"));
 	trace_seq_destroy(&seq);
 }

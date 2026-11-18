@@ -107,6 +107,7 @@ static int ras_cxl_poison_event_handler(struct trace_seq *s,
 	unsigned long long val;
 	struct ras_events *ras = context;
 	struct ras_cxl_poison_event ev;
+	char uuid[sizeof("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")];
 
 	trace_seq_printf(s, "%s ", loglevel_str[LOGLEVEL_ERR]);
 	get_timestamp(s, record, ras, (char *)&ev.timestamp, sizeof(ev.timestamp));
@@ -160,8 +161,10 @@ static int ras_cxl_poison_event_handler(struct trace_seq *s,
 
 	ev.uuid = tep_get_field_raw(s, event, "uuid",
 				    record, &len, 1);
-	if (!ev.uuid)
+	if (!ev.uuid || len != 16)
 		return -1;
+	strscpy(uuid, ras_uuid_str(ev.uuid, RAS_UUID_BE), sizeof(uuid));
+	ev.uuid = uuid;
 	if (trace_seq_printf(s, "region_uuid:%s ", ev.uuid) <= 0)
 		return -1;
 
