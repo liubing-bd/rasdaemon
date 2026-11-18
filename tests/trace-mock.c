@@ -198,7 +198,7 @@ FILE *__wrap_popen(const char *command, const char *type)
 		return __real_popen(command, type);
 
 	assert(!mock_popen_stream);
-	assert(!strcmp(command, "ipmitool sel 2>&1"));
+	assert(!strcmp(command, "timeout -k 2 10 ipmitool sel 2>&1"));
 	assert(!strcmp(type, "r"));
 	mock_popen_calls++;
 	mock_popen_stream = tmpfile();

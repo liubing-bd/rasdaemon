@@ -39,7 +39,10 @@ consumers, respectively.
 
 SEL consumers require a local IPMI device (``/dev/ipmi0``, ``/dev/ipmi/0``,
 or ``/dev/ipmidev/0``) and a successful ``ipmitool sel`` command with a
-``Version`` field. They remain disabled unless individually selected.
+``Version`` field. Both the probe and SEL writes use GNU coreutils
+``timeout``: the client receives SIGTERM after 10 seconds and SIGKILL if it
+is still running two seconds later. SEL consumers remain disabled unless
+individually selected.
 
 ``BMC_GENERIC_ENABLE=yes`` enables the generic BMC consumer. It writes
 standard IPMI system-event SEL records using the Critical Interrupt sensor:

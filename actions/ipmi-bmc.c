@@ -14,6 +14,9 @@
 #include "core/modules.h"
 #include "core/ras-logger.h"
 
+/* Bound both local-interface operations, including a client ignoring SIGTERM. */
+#define IPMI_BMC_COMMAND "timeout -k 2 10 ipmitool"
+
 bool ipmi_bmc_config_enabled(const char *name)
 {
 	const char *value = getenv(name);
@@ -54,7 +57,7 @@ static int ipmi_bmc_probe_sel(void)
 		return -ENODEV;
 
 	/* Capture stderr too, avoiding shell diagnostics during the probe. */
-	fp = popen("ipmitool sel 2>&1", "r");
+	fp = popen(IPMI_BMC_COMMAND " sel 2>&1", "r");
 	if (!fp)
 		return -errno;
 
@@ -78,8 +81,8 @@ static int ipmi_bmc_probe_sel(void)
 
 int ipmi_bmc_add_sel_entry(const uint8_t *record, size_t size)
 {
-	char command[256] = "ipmitool raw 0x0a 0x44";
-	size_t offset = sizeof("ipmitool raw 0x0a 0x44") - 1;
+	char command[256] = IPMI_BMC_COMMAND " raw 0x0a 0x44";
+	size_t offset = sizeof(IPMI_BMC_COMMAND " raw 0x0a 0x44") - 1;
 	int written;
 
 	if (!record || size != IPMI_BMC_SEL_RECORD_SIZE)
