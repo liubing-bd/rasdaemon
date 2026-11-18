@@ -67,6 +67,52 @@ static void test_string_helpers(void **state)
 	assert_int_equal(EXTRACT(0xabcd, 4, 7), 0xc);
 }
 
+static void test_instance_subscriptions(void **state)
+{
+	char dir[] = "/tmp/rasdaemon-instance-XXXXXX";
+	char events[sizeof(dir) + sizeof("/events")];
+	char enable[sizeof(events) + sizeof("/enable")];
+	struct ras_events first = { .daemon_active_fd = -1, .instance_fd = -1 };
+	struct ras_events second;
+	char value;
+	int fd;
+
+	assert_non_null(mkdtemp(dir));
+	snprintf(events, sizeof(events), "%s/events", dir);
+	snprintf(enable, sizeof(enable), "%s/enable", events);
+	assert_int_equal(mkdir(events, 0700), 0);
+	fd = open(enable, O_CREAT | O_RDWR, 0600);
+	assert_true(fd >= 0);
+	assert_int_equal(write(fd, "1", 1), 1);
+	strscpy(first.tracing, dir, sizeof(first.tracing));
+	assert_int_equal(ras_events_test_reset_instance(&first), 0);
+	assert_int_equal(pread(fd, &value, 1, 0), 1);
+	assert_int_equal(value, '1');
+
+	first.dedicated_instance = 1;
+	second = first;
+	assert_int_equal(ras_events_test_reset_instance(&first), 0);
+	assert_int_equal(pread(fd, &value, 1, 0), 1);
+	assert_int_equal(value, '0');
+	assert_int_equal(pwrite(fd, "1", 1, 0), 1);
+	assert_int_equal(ras_events_test_reset_instance(&second), -EWOULDBLOCK);
+	assert_int_equal(pread(fd, &value, 1, 0), 1);
+	assert_int_equal(value, '1');
+	ras_events_cleanup(&first);
+	assert_int_equal(ras_events_test_reset_instance(&second), 0);
+	assert_int_equal(pread(fd, &value, 1, 0), 1);
+	assert_int_equal(value, '0');
+	ras_events_cleanup(&second);
+
+	assert_int_equal(close(fd), 0);
+	assert_int_equal(unlink(enable), 0);
+	assert_int_equal(mkdir(enable, 0700), 0);
+	assert_int_equal(ras_events_test_reset_instance(&first), -EISDIR);
+	assert_int_equal(rmdir(enable), 0);
+	assert_int_equal(rmdir(events), 0);
+	assert_int_equal(rmdir(dir), 0);
+}
+
 static void test_bitfield_message(void **state)
 {
 	static const char * const names[] = { "zero", NULL, "two" };
@@ -392,6 +438,7 @@ static int consumer_test_setup(void **state)
 
 static const struct CMUnitTest tests[] = {
 	cmocka_unit_test(test_string_helpers),
+	cmocka_unit_test(test_instance_subscriptions),
 	cmocka_unit_test(test_bitfield_message),
 	cmocka_unit_test(test_bitfield_decoders),
 #ifdef HAVE_CPU_FAULT_ISOLATION

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/poll.h>
 #include <sys/signalfd.h>
 #include <sys/stat.h>
@@ -269,6 +270,7 @@ static int get_tracing_dir(struct ras_events *ras)
 	DIR		*dir;
 	struct dirent	*entry;
 
+	ras->dedicated_instance = 0;
 	rc = get_tracefs_dir(fname, sizeof(fname));
 	if (rc < 0) {
 		/* check under deprecated debugfs location */
@@ -289,7 +291,7 @@ static int get_tracing_dir(struct ras_events *ras)
 		return -EINVAL;
 
 	for (entry = readdir(dir); entry; entry = readdir(dir)) {
-		if (strstr(entry->d_name, "instances")) {
+		if (!strcmp(entry->d_name, "instances")) {
 			has_instances = 1;
 			break;
 		}
@@ -310,9 +312,56 @@ static int get_tracing_dir(struct ras_events *ras)
 			    ras->tracing);
 			return -EINVAL;
 		}
+		ras->dedicated_instance = 1;
 	}
 	return 0;
 }
+
+/* Hold the directory lock until collection stops. Never reset global tracefs. */
+static int reset_instance_subscriptions(struct ras_events *ras)
+{
+	int dirfd, fd, rc;
+	ssize_t n;
+
+	if (!ras->dedicated_instance)
+		return 0;
+
+	dirfd = open(ras->tracing, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dirfd < 0)
+		return -errno;
+	if (flock(dirfd, LOCK_EX | LOCK_NB) < 0) {
+		rc = -errno;
+		goto unlock;
+	}
+	fd = open_trace(ras, "events/enable", O_WRONLY | O_CLOEXEC);
+	if (fd < 0) {
+		rc = fd;
+		goto unlock;
+	}
+	do {
+		n = write(fd, "0", 1);
+	} while (n < 0 && errno == EINTR);
+	rc = n < 0 ? -errno : 0;
+	if (!n)
+		rc = -EIO;
+	if (close(fd) < 0 && !rc)
+		rc = -errno;
+	if (rc < 0)
+		goto unlock;
+
+	ras->instance_fd = dirfd;
+	return 0;
+unlock:
+	close(dirfd);
+	return rc;
+}
+
+#ifdef HAVE_UNITTEST
+int ras_events_test_reset_instance(struct ras_events *ras)
+{
+	return reset_instance_subscriptions(ras);
+}
+#endif
 
 /**
  * is_disabled_event - check the configured trace-event deny list
@@ -1486,6 +1535,15 @@ int ras_events_prepare(struct ras_events *ras, int record_events)
 	if (!pevent)
 		return -errno;
 
+	ras->instance_fd = -1;
+	rc = reset_instance_subscriptions(ras);
+	if (rc < 0) {
+		log(TERM, LOG_ERR, "Can't reset tracing events in %s: %s\n",
+		    ras->tracing, strerror(-rc));
+		tep_free(pevent);
+		return rc;
+	}
+
 	ras->pevent = pevent;
 	ras->page_size = get_pagesize(ras, pevent);
 	ras->record_events = record_events;
@@ -1541,6 +1599,10 @@ void ras_events_cleanup(struct ras_events *ras)
 	if (!ras)
 		return;
 
+	if (ras->dedicated_instance && ras->instance_fd >= 0) {
+		close(ras->instance_fd);
+		ras->instance_fd = -1;
+	}
 	if (ras->daemon_active_fd >= 0) {
 		close(ras->daemon_active_fd);
 		ras->daemon_active_fd = -1;

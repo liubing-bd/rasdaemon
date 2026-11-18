@@ -162,6 +162,8 @@ struct ras_event_entry {
 
 /**
  * struct ras_events - process-wide tracing and database state
+ * @instance_fd: directory lock held while collecting from the dedicated instance
+ * @dedicated_instance: the selected directory is the rasdaemon trace instance
  * @tracing: mounted tracefs/debugfs tracing directory
  * @pevent: shared trace-event parser
  * @page_size: kernel tracing page size
@@ -183,7 +185,10 @@ struct ras_events {
 	struct tep_handle	*pevent;
 	int			page_size;
 
+	int			instance_fd;
+
 	/* Booleans */
+	unsigned		dedicated_instance: 1;
 	unsigned		use_uptime: 1;
 	unsigned		record_events: 1;
 
@@ -293,6 +298,7 @@ int ras_events_prepare(struct ras_events *ras, int record_events);
 void ras_events_cleanup(struct ras_events *ras);
 int handle_ras_events(struct ras_events *ras);
 #ifdef HAVE_UNITTEST
+int ras_events_test_reset_instance(struct ras_events *ras);
 bool ras_events_test_is_disabled(const char *group, const char *event);
 #endif
 
