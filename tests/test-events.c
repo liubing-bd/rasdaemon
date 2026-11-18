@@ -553,6 +553,56 @@ static void test_cxl_poison_record(void **state)
 	trace_seq_destroy(&seq);
 }
 
+static void test_cxl_general_media_subtype(void **state)
+{
+	static const char * const mandatory[] = {
+		"serial", "log", "hdr_flags", "hdr_handle", "hdr_related_handle",
+		"hdr_timestamp", "hdr_length", "hdr_maint_op_class", "dpa", "dpa_flags",
+		"descriptor", "type", "transaction_type", "hpa", "hpa_alias0", "validity_flags",
+	};
+	static const unsigned char uuid[16] = { 0 };
+	static const struct {
+		bool present;
+		bool readable;
+		int result;
+	} cases[] = {
+		{ false, false, 0 },
+		{ true, true, 0 },
+		{ true, false, -1 },
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		struct tep_format_field field = { .name = "sub_type" };
+		struct tep_event event = { 0 };
+		struct tep_record record;
+		struct trace_seq seq;
+		struct ras_events ras;
+		const char *output;
+		int ret;
+
+		init_trace(&seq, &record, &ras);
+		if (cases[i].present)
+			event.format.fields = &field;
+		if (cases[i].readable)
+			trace_mock_add_value("sub_type", 1);
+		for (size_t j = 0; j < ARRAY_SIZE(mandatory); j++)
+			trace_mock_add_value(mandatory[j], 0);
+		trace_mock_add_raw("memdev", "mem0", sizeof("mem0"));
+		trace_mock_add_raw("host", "host0", sizeof("host0"));
+		trace_mock_add_raw("hdr_uuid", uuid, sizeof(uuid));
+		trace_mock_add_raw("region_name", "region0", sizeof("region0"));
+		trace_mock_add_raw("region_uuid", uuid, sizeof(uuid));
+		ret = RUN_EVENT("cxl", "cxl_general_media", &seq, &record, &event, &ras);
+		output = finish_trace(&seq);
+		assert_int_equal(ret, cases[i].result);
+		if (cases[i].readable)
+			assert_non_null(strstr(output, "memory_event_sub_type:"));
+		else
+			assert_null(strstr(output, "memory_event_sub_type:"));
+		trace_seq_destroy(&seq);
+	}
+}
+
 static void test_all_cxl_handlers_reject_empty_record(void **state)
 {
 	static const char * const events[] = {
@@ -584,6 +634,7 @@ static void test_all_cxl_handlers_reject_empty_record(void **state)
 static const struct CMUnitTest cxl_tests[] = {
 	cmocka_unit_test(test_cxl_common_decoders),
 	cmocka_unit_test(test_cxl_poison_record),
+	cmocka_unit_test(test_cxl_general_media_subtype),
 	cmocka_unit_test(test_all_cxl_handlers_reject_empty_record),
 };
 

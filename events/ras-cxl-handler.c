@@ -870,14 +870,16 @@ static int ras_cxl_general_media_event_handler(struct trace_seq *s,
 					      ARRAY_SIZE(cxl_gmer_mem_event_type), ev.type)) <= 0)
 		return -1;
 
-	if (tep_get_field_val(s,  event, "sub_type", record, &val, 1) < 0)
-		return -1;
-	ev.sub_type = val;
-	if (trace_seq_printf(s, "memory_event_sub_type:%s ",
-			     get_cxl_type_str(cxl_mem_event_sub_type,
-					      ARRAY_SIZE(cxl_mem_event_sub_type),
-					      ev.sub_type)) <= 0)
-		return -1;
+	if (tep_find_field(event, "sub_type")) {
+		if (tep_get_field_val(s, event, "sub_type", record, &val, 1) < 0)
+			return -1;
+		ev.sub_type = val;
+		if (trace_seq_printf(s, "memory_event_sub_type:%s ",
+				     get_cxl_type_str(cxl_mem_event_sub_type,
+						      ARRAY_SIZE(cxl_mem_event_sub_type),
+						      ev.sub_type)) <= 0)
+			return -1;
+	}
 
 	if (tep_get_field_val(s,  event, "transaction_type", record, &val, 1) < 0)
 		return -1;
