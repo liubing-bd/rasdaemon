@@ -33,6 +33,21 @@ class RasDatabaseDecodeTest(unittest.TestCase):
             str(identifier),
         )
 
+    def test_non_standard_identifiers_and_error(self):
+        identifier = uuid.UUID("00112233-4455-6677-8899-aabbccddeeff")
+        for field in ("sec_type", "fru_id"):
+            for wrap in (bytes, bytearray, memoryview):
+                with self.subTest(field=field, wrap=wrap):
+                    value = wrap(identifier.bytes_le)
+                    self.assertEqual(format_event_value("non_standard_event", field, value),
+                                     str(identifier))
+            for value in (b"", bytes(15), bytes(17), "unknown"):
+                with self.subTest(field=field, value=value):
+                    self.assertEqual(format_event_value("non_standard_event", field, value),
+                                     str(value))
+        self.assertEqual(format_event_value("non_standard_event", "error", bytes([0, 171])),
+                         "00 ab")
+
     def test_extlog_cper_memory_payload(self):
         validation = 0x0008 | 0x0100 | 0x0800 | 0x8000
         payload = struct.pack(

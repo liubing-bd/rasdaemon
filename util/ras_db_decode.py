@@ -362,6 +362,14 @@ def format_event_value(table: str, field: str, value: Any) -> str:
         if field == "cper_data":
             return _cper_memory(value)
 
+    if table == "non_standard_event":
+        if field in ("sec_type", "fru_id"):
+            data = _as_bytes(value)
+            if data is not None and len(data) == 16:
+                return _uuid_le(data)
+        if field == "error":
+            return _hex_blob(value)
+
     cxl = _format_cxl(table, field, value)
     if cxl is not None:
         return cxl
