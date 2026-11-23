@@ -35,6 +35,7 @@
 #include "events/ras-memory-failure-handler.h"
 #include "events/ras-signal-handler.h"
 #include "tests/unittest.h"
+#include "tests/trace-mock.h"
 #include "tests/test-db-concurrency.h"
 
 struct mock_priv {
@@ -679,6 +680,77 @@ static void test_database_environment(void **state)
 	}
 }
 
+#ifdef HAVE_CXL
+static void check_media_uuids(const char *name, bool has_region)
+{
+	static const char * const fields[] = {
+		"serial", "log", "hdr_flags", "hdr_handle", "hdr_related_handle",
+		"hdr_timestamp", "hdr_length", "hdr_maint_op_class", "dpa", "dpa_flags",
+		"descriptor", "type", "sub_type", "transaction_type", "hpa", "hpa_alias0",
+		"validity_flags",
+	};
+	const char *header_text = "00112233-4455-6677-8899-aabbccddeeff";
+	const char *region_text = has_region ? "ffeeddcc-bbaa-9988-7766-554433221100" : NULL;
+	sqlite3 *db = (sqlite3 *)ras.db;
+	bool was_recording = ras.record_events;
+	unsigned char header[CXL_UUID_SIZE], region[CXL_UUID_SIZE];
+	long saved_hz = user_hz;
+	int changes = sqlite3_total_changes(db);
+	struct tep_record record = { 0 };
+	struct tep_event event = { 0 };
+	struct trace_seq seq;
+	sqlite3_stmt *stmt;
+	char sql[128];
+	int ret;
+
+	for (size_t i = 0; i < sizeof(header); i++) {
+		header[i] = 0x11 * i;
+		region[i] = 0xff - header[i];
+	}
+	trace_seq_init(&seq);
+	trace_mock_start();
+	for (size_t i = 0; i < ARRAY_SIZE(fields); i++)
+		trace_mock_add_value(fields[i], 0);
+	trace_mock_add_raw("memdev", "mem0", sizeof("mem0"));
+	trace_mock_add_raw("host", "host0", sizeof("host0"));
+	trace_mock_add_raw("hdr_uuid", header, sizeof(header));
+	if (has_region) {
+		trace_mock_add_raw("region_name", "region0", sizeof("region0"));
+		trace_mock_add_raw("region_uuid", region, sizeof(region));
+	}
+	user_hz = 100;
+	ras.record_events = true;
+	ret = ras_event_test_handler("cxl", name)(&seq, &record, &event, &ras);
+	ras.record_events = was_recording;
+	user_hz = saved_hz;
+	trace_mock_stop();
+	trace_seq_destroy(&seq);
+	assert_int_equal(ret, 0);
+
+	assert_int_equal(sqlite3_total_changes(db), changes + 1);
+	snprintf(sql, sizeof(sql),
+		 "SELECT hdr_uuid = ?1 AND region_uuid IS ?2 FROM %s_event WHERE id = last_insert_rowid()",
+		 name);
+	assert_int_equal(sqlite3_prepare_v2(db, sql, -1, &stmt, NULL), SQLITE_OK);
+	assert_int_equal(sqlite3_bind_text(stmt, 1, header_text, -1, SQLITE_STATIC), SQLITE_OK);
+	assert_int_equal(sqlite3_bind_text(stmt, 2, region_text, -1, SQLITE_STATIC), SQLITE_OK);
+	ret = sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0);
+	assert_int_equal(sqlite3_finalize(stmt), SQLITE_OK);
+	assert_true(ret);
+}
+
+static void test_cxl_general_media_uuids(void **state)
+{
+	check_media_uuids("cxl_general_media", true);
+}
+
+static void test_cxl_dram_uuids(void **state)
+{
+	check_media_uuids("cxl_dram", true);
+	check_media_uuids("cxl_dram", false);
+}
+#endif
+
 static void test_mc_event_recording(void **state)
 {
 	const char *database = "/tmp/rasdaemon-mc-event-test.db";
@@ -1124,6 +1196,10 @@ static const struct CMUnitTest tests[] = {
 	cmocka_unit_test(test_db_reference_count),
 	cmocka_unit_test(test_database_environment),
 	cmocka_unit_test(test_mc_event_recording),
+#ifdef HAVE_CXL
+	cmocka_unit_test_setup_teardown(test_cxl_general_media_uuids, tests_setup, tests_teardown),
+	cmocka_unit_test_setup_teardown(test_cxl_dram_uuids, tests_setup, tests_teardown),
+#endif
 
 	cmocka_unit_test_setup_teardown(test_database_tables,
 					tests_setup, tests_teardown),

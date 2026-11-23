@@ -29,6 +29,7 @@ struct ras_cxl_poison_event {
 	char overflow_ts[64];
 };
 
+#define CXL_UUID_SIZE			16
 #define CXL_HEADERLOG_SIZE              SZ_512
 #define CXL_HEADERLOG_SIZE_U32          (SZ_512 / sizeof(uint32_t))
 #define CXL_EVENT_RECORD_DATA_LENGTH	0x50
