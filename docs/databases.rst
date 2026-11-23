@@ -180,3 +180,29 @@ can be created with::
      GRANT ALL PRIVILEGES ON rasdaemon.* TO 'rasdaemon'@'%';
      FLUSH PRIVILEGES;
    EOF
+
+Upgrading existing CXL memory module tables
+-------------------------------------------
+
+The three CXL memory module health counters are unsigned 32-bit values.
+New server databases use signed 64-bit columns to represent their full
+range. If your existing ``cxl_memory_module_event`` table has 32-bit
+integer columns, stop writers and widen the columns in the rasdaemon
+database before restarting with the updated daemon. For PostgreSQL, run
+the following in the schema configured for rasdaemon::
+
+   ALTER TABLE cxl_memory_module_event
+       ALTER COLUMN dirty_shutdown_cnt TYPE BIGINT,
+       ALTER COLUMN cor_vol_err_cnt TYPE BIGINT,
+       ALTER COLUMN cor_per_err_cnt TYPE BIGINT;
+
+For MySQL or MariaDB::
+
+   ALTER TABLE cxl_memory_module_event
+       MODIFY COLUMN dirty_shutdown_cnt BIGINT,
+       MODIFY COLUMN cor_vol_err_cnt BIGINT,
+       MODIFY COLUMN cor_per_err_cnt BIGINT;
+
+SQLite already stores these columns as ``INTEGER`` and requires no schema
+change. These changes preserve existing rows. Previously recorded values
+are not corrected automatically.

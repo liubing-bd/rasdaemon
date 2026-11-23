@@ -204,7 +204,7 @@ static void sqlite3_assert_row_count(sqlite3 *db, const char *table,
 	assert_int_equal(sqlite3_finalize(stmt), SQLITE_OK);
 }
 
-#ifdef HAVE_MCE
+#if defined(HAVE_MCE) || defined(HAVE_CXL)
 static void sqlite3_assert_u64_column(sqlite3 *db, const char *table,
 				      const char *column, uint64_t expected)
 {
@@ -679,6 +679,25 @@ static void test_database_environment(void **state)
 	}
 }
 
+#ifdef HAVE_CXL
+static void test_cxl_memory_module_counters(void **state)
+{
+	struct ras_cxl_memory_module_event module = {
+		.dirty_shutdown_cnt = UINT32_MAX,
+		.cor_vol_err_cnt = (uint32_t)INT32_MAX + 2,
+		.cor_per_err_cnt = (uint32_t)INT32_MAX + 1,
+	};
+	const char *table = "cxl_memory_module_event";
+	sqlite3 *db = (sqlite3 *)ras.db;
+
+	init_cxl_header(&module.hdr);
+	assert_int_equal(ras_event_record(&ras, CXL_MEMORY_MODULE_EVENT, &module), 0);
+	sqlite3_assert_u64_column(db, table, "dirty_shutdown_cnt", module.dirty_shutdown_cnt);
+	sqlite3_assert_u64_column(db, table, "cor_vol_err_cnt", module.cor_vol_err_cnt);
+	sqlite3_assert_u64_column(db, table, "cor_per_err_cnt", module.cor_per_err_cnt);
+}
+#endif
+
 static void test_mc_event_recording(void **state)
 {
 	const char *database = "/tmp/rasdaemon-mc-event-test.db";
@@ -1124,6 +1143,9 @@ static const struct CMUnitTest tests[] = {
 	cmocka_unit_test(test_db_reference_count),
 	cmocka_unit_test(test_database_environment),
 	cmocka_unit_test(test_mc_event_recording),
+#ifdef HAVE_CXL
+	cmocka_unit_test_setup_teardown(test_cxl_memory_module_counters, tests_setup, tests_teardown),
+#endif
 
 	cmocka_unit_test_setup_teardown(test_database_tables,
 					tests_setup, tests_teardown),
