@@ -1367,7 +1367,7 @@ static int ras_cxl_memory_module_event_handler(struct trace_seq *s,
 	if (tep_get_field_val(s, event, "device_temp", record, &val, 1) < 0)
 		return -1;
 	ev.device_temp = val;
-	if (trace_seq_printf(s, "device_temp:%u ", ev.device_temp) <= 0)
+	if (trace_seq_printf(s, "device_temp:%d ", ev.device_temp) <= 0)
 		return -1;
 
 	if (tep_get_field_val(s, event, "dirty_shutdown_cnt", record, &val, 1) < 0)

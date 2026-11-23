@@ -734,7 +734,7 @@ static void test_cxl_memory_module_legacy_record(void **state)
 		{ "event_type", 3 },
 		{ "health_status", 1 },
 		{ "life_used", 10 },
-		{ "device_temp", 30 },
+		{ "device_temp", (uint16_t)-5 },
 		{ "dirty_shutdown_cnt", 2 },
 		{ "cor_vol_err_cnt", 3 },
 		{ "cor_per_err_cnt", 4 },
@@ -784,7 +784,8 @@ static void test_cxl_memory_module_legacy_record(void **state)
 	assert_string_equal(mmer_record.host, "host0");
 	assert_int_equal(mmer_record.serial, 0x1234);
 	assert_int_equal(mmer_record.health_status, 1);
-	assert_int_equal(mmer_record.device_temp, 30);
+	assert_int_equal(mmer_record.device_temp, -5);
+	assert_non_null(strstr(output, "device_temp:-5 "));
 	assert_int_equal(mmer_record.cor_per_err_cnt, 4);
 	assert_int_equal(mmer_record.event_sub_type, 0);
 	assert_int_equal(mmer_record.validity_flags, 0);
