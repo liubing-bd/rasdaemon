@@ -99,6 +99,15 @@ enum cxl_poison_trace_type {
 	CXL_POISON_TRACE_CLEAR,
 };
 
+#define CXL_UUID_STR_SIZE sizeof("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+/* ras_uuid_str() reuses its buffer; keep formatted UUIDs until publication ends. */
+static const char *save_formatted_uuid(char dst[CXL_UUID_STR_SIZE], const char *uuid)
+{
+	strscpy(dst, uuid, CXL_UUID_STR_SIZE);
+	return dst;
+}
+
 static int ras_cxl_poison_event_handler(struct trace_seq *s,
 					struct tep_record *record,
 					struct tep_event *event, void *context)
@@ -107,6 +116,7 @@ static int ras_cxl_poison_event_handler(struct trace_seq *s,
 	unsigned long long val;
 	struct ras_events *ras = context;
 	struct ras_cxl_poison_event ev;
+	char uuid[CXL_UUID_STR_SIZE];
 
 	trace_seq_printf(s, "%s ", loglevel_str[LOGLEVEL_ERR]);
 	get_timestamp(s, record, ras, (char *)&ev.timestamp, sizeof(ev.timestamp));
@@ -160,8 +170,9 @@ static int ras_cxl_poison_event_handler(struct trace_seq *s,
 
 	ev.uuid = tep_get_field_raw(s, event, "uuid",
 				    record, &len, 1);
-	if (!ev.uuid)
+	if (!ev.uuid || len != CXL_UUID_SIZE)
 		return -1;
+	ev.uuid = save_formatted_uuid(uuid, ras_uuid_str(ev.uuid, RAS_UUID_BE));
 	if (trace_seq_printf(s, "region_uuid:%s ", ev.uuid) <= 0)
 		return -1;
 
@@ -824,15 +835,6 @@ static const char * const cxl_gmer_trans_type[] = {
 	"Internal Media Error Check Scrub",
 	"Media Initialization",
 };
-
-#define CXL_UUID_STR_SIZE sizeof("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-
-/* ras_uuid_str() reuses its buffer; keep both UUIDs until publication ends. */
-static const char *save_formatted_uuid(char dst[CXL_UUID_STR_SIZE], const char *uuid)
-{
-	strscpy(dst, uuid, CXL_UUID_STR_SIZE);
-	return dst;
-}
 
 static int ras_cxl_general_media_event_handler(struct trace_seq *s,
 					       struct tep_record *record,

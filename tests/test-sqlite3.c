@@ -739,6 +739,59 @@ static void check_media_uuids(const char *name, bool has_region)
 	assert_true(ret);
 }
 
+static void test_cxl_poison_uuids(void **state)
+{
+	static const char query[] =
+		"SELECT region_uuid FROM cxl_poison_event WHERE id = last_insert_rowid()";
+	static const char * const fields[] = {
+		"serial", "trace_type", "hpa", "hpa_alias0", "dpa", "dpa_length", "source", "flags",
+	};
+	static const struct {
+		unsigned char uuid[CXL_UUID_SIZE];
+		const char *region;
+		const char *expected;
+	} cases[] = {
+		{ { 0, 0xab }, "region0", "00ab0000-0000-0000-0000-000000000000" },
+		{ { 0 }, "", "00000000-0000-0000-0000-000000000000" },
+	};
+	sqlite3 *db = (sqlite3 *)ras.db;
+	bool was_recording = ras.record_events;
+	long saved_hz = user_hz;
+
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		int changes = sqlite3_total_changes(db);
+		struct tep_record record = { 0 };
+		struct tep_event event = { 0 };
+		struct trace_seq seq;
+		sqlite3_stmt *stmt;
+		int ret;
+
+		trace_seq_init(&seq);
+		trace_mock_start();
+		for (size_t j = 0; j < ARRAY_SIZE(fields); j++)
+			trace_mock_add_value(fields[j], 0);
+		trace_mock_add_raw("memdev", "mem0", sizeof("mem0"));
+		trace_mock_add_raw("host", "host0", sizeof("host0"));
+		trace_mock_add_raw("region", cases[i].region, strlen(cases[i].region) + 1);
+		trace_mock_add_raw("uuid", cases[i].uuid, sizeof(cases[i].uuid));
+		ras.record_events = true;
+		user_hz = 100;
+		ret = ras_event_test_handler("cxl", "cxl_poison")(&seq, &record, &event, &ras);
+		user_hz = saved_hz;
+		ras.record_events = was_recording;
+		trace_mock_stop();
+		assert_int_equal(ret, 0);
+		trace_seq_terminate(&seq);
+		assert_non_null(strstr(seq.buffer, cases[i].expected));
+		trace_seq_destroy(&seq);
+		assert_int_equal(sqlite3_total_changes(db), changes + 1);
+		assert_int_equal(sqlite3_prepare_v2(db, query, -1, &stmt, NULL), SQLITE_OK);
+		assert_int_equal(sqlite3_step(stmt), SQLITE_ROW);
+		assert_string_equal((const char *)sqlite3_column_text(stmt, 0), cases[i].expected);
+		assert_int_equal(sqlite3_finalize(stmt), SQLITE_OK);
+	}
+}
+
 static void test_cxl_general_media_uuids(void **state)
 {
 	check_media_uuids("cxl_general_media", true);
@@ -1197,6 +1250,7 @@ static const struct CMUnitTest tests[] = {
 	cmocka_unit_test(test_database_environment),
 	cmocka_unit_test(test_mc_event_recording),
 #ifdef HAVE_CXL
+	cmocka_unit_test_setup_teardown(test_cxl_poison_uuids, tests_setup, tests_teardown),
 	cmocka_unit_test_setup_teardown(test_cxl_general_media_uuids, tests_setup, tests_teardown),
 	cmocka_unit_test_setup_teardown(test_cxl_dram_uuids, tests_setup, tests_teardown),
 #endif
